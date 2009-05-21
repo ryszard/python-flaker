@@ -11,7 +11,7 @@ import base64
 
 
 
-DEBUG=True
+DEBUG=False
 
 class FlakError(Exception):
     "Basic Flaker error."
@@ -122,6 +122,9 @@ class Flaker(object):
         else:
             self.login = self.password = None
 
+    def authorize(self, login, password):
+        self.login, self.password = login, password
+
     def translate_value(self, val):
         if isinstance(val, bool):
             return "true" if val else "false"
@@ -157,7 +160,7 @@ class Flaker(object):
                 h = handle.read()
                 response = json.loads(h, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
             else:
-                response = json.load(h)
+                response = json.load(handle, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
                 h = None
         except ValueError,e:
             raise FlakError(h)

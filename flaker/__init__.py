@@ -36,15 +36,30 @@ def login_required(fun):
     return _wrapper
 
 def flak_decoding(fun):
-    def wrapper(*a, **kw):
-        res = fun(*a, **kw)
+    def wrapper(self, *a, **kw):
+        res = fun(self, *a, **kw)
         if 'friends' in res:
-            return [Flak(**e) for e in res['entries']], [FlakUser(**e) for e in res['friends']]
+            return [self.flak_class(**e) for e in res['entries']], [self.flakuser_class(**e) for e in res['friends']]
         else:
-            return [Flak(**e) for e in res['entries']]
+            return [self.flak_class(**e) for e in res['entries']]
     return wrapper
 
+class FlakUser(object):
+    def __init__(self, login=None, url=None, avatar=None, sex=None, action=None):
+        self.login = login
+        self.url = url
+        self.avatar = avatar
+        self.sex = sex # is this used anywhere?
+        self.action = action
+
+    def __eq__(self, other):
+        return self.login == other.login and self.url == other.url
+
+    def __repr__(self):
+        return "FlakUser(login=%r, url=%r, avatar=%r, sex=%r)" % (self.login, self.url, self.avatar, self.sex)
+
 class Flak(object):
+    flakuser_class = FlakUser
     def __init__(self,
                  permalink=None,
                  time=None,
@@ -65,7 +80,7 @@ class Flak(object):
         self.comments = comments
         self.source = source
         self.link = link
-        self.user = user if isinstance(user, FlakUser) else FlakUser(**user)
+        self.user = user if isinstance(user, FlakUser) else self.flakuser_class(**user)
 
 
 
@@ -90,23 +105,14 @@ class Flak(object):
              self.source, self.link, self.video,
              self.photo, self.user, self.text, self.data, self.id)
 
-class FlakUser(object):
-    def __init__(self, login=None, url=None, avatar=None, sex=None, action=None):
-        self.login = login
-        self.url = url
-        self.avatar = avatar
-        self.sex = sex # is this used anywhere?
-        self.action = action
 
-    def __eq__(self, other):
-        return self.login == other.login and self.url == other.url
-
-    def __repr__(self):
-        return "FlakUser(login=%r, url=%r, avatar=%r, sex=%r)" % (self.login, self.url, self.avatar, self.sex)
 
 class Flaker(object):
 
     URI = 'http://api.flaker.pl/api/'
+    flak_class = Flak
+    flakuser_class = FlakUser
+
 
     def __init__(self, login=None, password=None):
         if login and password:
@@ -190,7 +196,7 @@ class Flaker(object):
 
 
     def show(self, entry_id):
-        return Flak(**self.request(type='show', entry_id=entry_id)['entries'][0])
+        return self.flak_class(**self.request(type='show', entry_id=entry_id)['entries'][0])
 
     def get_messages(self,
                      tag=None,

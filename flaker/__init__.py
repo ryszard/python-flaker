@@ -30,6 +30,11 @@ def login_required(fun):
 
     return _wrapper
 
+
+class Flak(object):
+    def __init__(self, **kw):
+        self.data = kw
+
 class Flaker(object):
 
     URI = 'http://api.flaker.pl/api/'
@@ -66,19 +71,31 @@ class Flaker(object):
                 raise FlakDuplicateMessageError
             elif code == 401:
                 raise FlakAuthorizationError
+            elif code == 400:
+                raise FlakError(url)
+            else:
+                raise
 
         try:
-            response = json.load(handle)['status']
+            response = json.load(handle)
         except ValueError,e:
-            raise FlakError(e)
-        if int(response['code']) == 200 and response['text'] == 'OK':
-            return response['info']
-        else:
-            raise FlakError(response)
+            print h
+            raise FlakError(h)
+
+        return response
 
     @login_required
     def auth(self):
-        return self.request(type='auth', authorize=True)
+        r = self.request(type='auth', authorize=True)['status']
+        if r['text'] == "OK":
+            return True
+
+    def bookmarks(self, login):
+        return [Flak(**dict((str(k), v) for k, v in e.items())) for e in self.request(login=login)['entries']]
+
+    @login_required
+    def tags(self):
+        return self.request(type='tags', authorize=True, login=self.login)['tags']
 
     @login_required
     def submit(self, text, link=None, photo=None):
@@ -92,7 +109,7 @@ class Flaker(object):
                 data['photo'] = open(photo)
             except IOError:
                 data['link'] = photo
-        return self.request(data=data, authorize=True, type='submit')
+        return self.request(data=data, authorize=True, type='submit')['status']['info']
 
 
 if __name__=="__main__":
@@ -102,3 +119,9 @@ if __name__=="__main__":
     print login, password
     flak = Flaker(login=login, password=password)
     print flak.auth()
+    print flak.tags()
+#     print
+#     for f in flak.bookmarks(login="hazan"):
+#         for k,v in f.data.items():
+#             print "%s: %s"%(k,v)
+#         print

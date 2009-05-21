@@ -35,6 +35,14 @@ def login_required(fun):
 
     return _wrapper
 
+def flak_decoding(fun):
+    def wrapper(*a, **kw):
+        res = fun(*a, **kw)
+        if 'friends' in res:
+            return [Flak(**e) for e in res['entries']], [FlakUser(**e) for e in res['friends']]
+        else:
+            return [Flak(**e) for e in res['entries']]
+    return wrapper
 
 class Flak(object):
     def __init__(self,
@@ -58,6 +66,8 @@ class Flak(object):
         self.source = source
         self.link = link
         self.user = user if isinstance(user, FlakUser) else FlakUser(**user)
+
+
 
         self.text = text
         self.photo = photo
@@ -154,8 +164,9 @@ class Flaker(object):
         if r['text'] == "OK":
             return True
 
+    @flak_decoding
     def bookmarks(self, login):
-        return [Flak(**dict((str(k), v) for k, v in e.items())) for e in self.request(login=login)['entries']]
+        return self.request(login=login)
 
     @login_required
     def tags(self):
@@ -179,7 +190,7 @@ class Flaker(object):
 
 
     def show(self, entry_id):
-        return self.request(type='show', entry_id=entry_id)['entries'][0]
+        return Flak(**self.request(type='show', entry_id=entry_id)['entries'][0])
 
     def get_messages(self,
                      tag=None,
@@ -207,12 +218,14 @@ class Flaker(object):
         kw['comments'] = comments
         return self.request(**kw)
 
+    @flak_decoding
     def friends(self, login):
         """Get all the friends of `login`.
 
         """
         return self.request(type='friends', login=login)
 
+    @flak_decoding
     def query(self,
               user=None,
               site=None,
@@ -257,7 +270,7 @@ if __name__=="__main__":
     flak = Flaker(login=login, password=password)
     print flak.auth()
 
-    print repr(Flak(**flak.friends('szopa')['entries'][1]))
+    print flak.bookmarks('szopa')
 
 #     print
 #     for f in flak.bookmarks(login="hazan"):

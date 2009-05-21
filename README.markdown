@@ -7,6 +7,17 @@ allows you to interact with your account: submit messages, bookmark
 them, browse your friends, and also query the service for messages
 meeting certain criteria.
 
+Installation
+------------
+
+The easiest way to install python-flaker is to use easy_install:
+    $ easy_install python-flaker
+
+If you prefer to use the development version, you can clone the git repository:
+
+    $ git clone git://github.com/ryszard/python-flaker.git
+
+
 Example
 -------------
 
@@ -73,16 +84,13 @@ in situations when the API requires `from` (for example, in
     >>> flaker.query(tag="python", from_=1) # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
     [Flak(...), ...]
 
-Installation
-------------
+Customization
+-------------
 
-The easiest way to install python-flaker is to use easy_install:
-    $ easy_install python-flaker
-
-If you prefer to use the development version, you can clone the git repository:
-
-    $ git clone git://github.com/ryszard/python-flaker.git
-
+The easiest way to customize the behavior is to subclass `Flaker`,
+`Flak` and `FlakUser`. `Flaker` has two class variables,
+`flakuser_class` and `flak_class` which govern the classes
+chosen. Override them to use your custom classes.
 
 Author & License
 -------

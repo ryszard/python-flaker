@@ -8,6 +8,8 @@ except ImportError:
     import simplejson as json
 import base64
 
+DEBUG=True
+
 class FlakError(Exception):
     "Basic Flaker error."
     pass
@@ -35,6 +37,9 @@ class Flak(object):
     def __init__(self, **kw):
         self.data = kw
 
+class FlakUser(object):
+    pass
+
 class Flaker(object):
 
     URI = 'http://api.flaker.pl/api/'
@@ -56,7 +61,8 @@ class Flaker(object):
     def request(self, data=None, authorize=False, **kw):
 
         url = self.URI + '/'.join("%s:%s" % (k, self.translate_value(v)) for k, v in kw.iteritems())
-
+        if DEBUG:
+            print url
         req = urllib2.Request(url, data = data)
 
         if authorize:
@@ -77,9 +83,13 @@ class Flaker(object):
                 raise
 
         try:
-            response = json.load(handle)
+            if DEBUG:
+                h = handle.read()
+                response = json.loads(h)
+            else:
+                response = json.load(h)
+                h = None
         except ValueError,e:
-            print h
             raise FlakError(h)
 
         return response
@@ -96,6 +106,81 @@ class Flaker(object):
     @login_required
     def tags(self):
         return self.request(type='tags', authorize=True, login=self.login)['tags']
+
+    def _bookmark(self, entry_id, bookmark):
+        action = 'set' if bookmark else 'unset'
+        r = self.request(type="bookmark", action=action, entry_id=entry_id, authorize=True)
+        if r['status']['text'] == 'OK':
+            return True
+        else:
+            raise FlakError(r)
+
+    @login_required
+    def bookmark(self, entry_id):
+        return self._bookmark(entry_id, True)
+
+    @login_required
+    def unbookmark(self, entry_id):
+        return self._bookmark(entry_id, False)
+
+
+    def show(self, entry_id):
+        return self.request(type='show', entry_id=entry_id)['entries'][0]
+
+    def get_messages(self,
+                     tag=None,
+                     avatars='small',
+                     limit=20,
+                     from_=None,
+                     start=None,
+                     since=None,
+                     sort='desc',
+                     comments=False,
+                     **kw):
+        if tag:
+            if tag == True:
+                tag = 'all'
+            kw[tag] = tag
+        kw['avatars'] = avatars
+        kw['limit'] = limit
+        if from_:
+            kw['from'] = from_
+        if start:
+            kw['start'] = start
+        if since:
+            kw['since'] = since
+        kw['sort'] = sort
+        kw['comments'] = comments
+        return self.request(**kw)
+
+    def friends(self, login):
+        """Get all the friends of `login`.
+
+        If you are interested in the messages by the friends, see
+        `query`.
+        """
+        return self.request(type='friends', login=login)['friends']
+
+    def query(self,
+              user=None,
+              site=None,
+              source=None,
+              **kw):
+        if len([o for o in (user, site, source) if o]) > 1:
+            raise FlakConfigurationError("You may provide at most one of `user`, `site` and `source`.")
+        if user:
+            kw['type'] = 'user'
+            kw['login'] = user
+        elif site:
+            kw['type'] = 'site'
+            kw['site'] = site
+        elif source:
+            kw['type'] = 'source'
+            kw['source'] = source
+        else:
+            kw['type'] = 'flakosfera'
+        print kw
+        return self.get_messages(**kw)
 
     @login_required
     def submit(self, text, link=None, photo=None):
@@ -119,7 +204,7 @@ if __name__=="__main__":
     print login, password
     flak = Flaker(login=login, password=password)
     print flak.auth()
-    print flak.tags()
+    print flak.unbookmark(1234)
 #     print
 #     for f in flak.bookmarks(login="hazan"):
 #         for k,v in f.data.items():

@@ -2,7 +2,7 @@ python-flaker
 =============
 
 This is the Python client library for [Flaker.pl](http://flaker.pl) (a
-Polish service similar to [FriendFeed](http://friendfeed.com).  It
+Polish service similar to [FriendFeed](http://friendfeed.com)).  It
 allows you to interact with your account: submit messages, bookmark
 them, browse your friends, and also query the service for messages
 meeting certain criteria.

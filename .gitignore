@@ -12,3 +12,6 @@ tmp
 .svn
 .hg*
 src/settings.py
+build
+dist
+flaker.egg-info

@@ -28,6 +28,8 @@ def login_required(fun):
         else:
             return fun(self, *a, **kw)
 
+    return _wrapper
+
 class Flaker(object):
 
     URI = 'http://api.flaker.pl/api/'
@@ -46,25 +48,15 @@ class Flaker(object):
         else:
             return val
 
-    @login_required
-    def submit(self, text, link=None, photo=None):
-        "Submit a status to Flaker."
-        data = {'text': text}
-        if link:
-            data['link'] = link
-        if photo:
-            # if it's not a file assume it is a URL to one.
-            try:
-                data['photo'] = open(photo)
-            except IOError:
-                data['link'] = photo
+    def request(self, data=None, authorize=False, **kw):
 
-        req = urllib2.Request(self.prepare_url(type='submit'),
-                              data = data)
+        url = self.URI + '/'.join("%s:%s" % (k, self.translate_value(v)) for k, v in kw.iteritems())
 
-        authheader = "Basic %s" % base64.encodestring("%s:%s"% (login, password))[:-1]
-        req.add_header("Authorization", authheader)
+        req = urllib2.Request(url, data = data)
 
+        if authorize:
+            authheader = "Basic %s" % base64.encodestring("%s:%s"% (login, password))[:-1]
+            req.add_header("Authorization", authheader)
 
         try:
             handle = urllib2.urlopen(req)
@@ -84,7 +76,29 @@ class Flaker(object):
         else:
             raise FlakError(response)
 
+    @login_required
+    def auth(self):
+        return self.request(type='auth', authorize=True)
 
-    def prepare_url(self, **kw):
-        return self.URI + '/'.join("%s:%s" % (k, v) for k, self.translate_value(v) in kw.iteritems())
+    @login_required
+    def submit(self, text, link=None, photo=None):
+        "Submit a status to Flaker."
+        data = {'text': text}
+        if link:
+            data['link'] = link
+        if photo:
+            # if it's not a file assume it is a URL to one.
+            try:
+                data['photo'] = open(photo)
+            except IOError:
+                data['link'] = photo
+        return self.request(data=data, authorize=True, type='submit')
 
+
+if __name__=="__main__":
+    import sys
+
+    login, password = sys.argv[1], sys.argv[2]
+    print login, password
+    flak = Flaker(login=login, password=password)
+    print flak.auth()

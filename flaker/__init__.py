@@ -50,6 +50,8 @@
         raise FlakDuplicateMessageError
     FlakDuplicateMessageError
 
+    >>> flaker.query(tag="python", from_=1) # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
+    [Flak(...), ...]
 
 """
 

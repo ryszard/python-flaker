@@ -1,4 +1,57 @@
 # -*- coding: utf-8 -*-
+"""
+    >>> flak = Flaker()
+
+    >>> flak.show(9)  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        Flak(...)
+
+    >>> flak.query(tag="python", limit=1, sort='asc') # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        [Flak(...)]
+
+    >>> flak.friends(login="szopa")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+    ([Flak(...), ...], [FlakUser(...), ...])
+
+    >>> flak.submit(text="The best blog in the world ;-)", link="http://gryziemy.net")
+    Traceback (most recent call last):
+      File "/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/doctest.py", line 1231, in __run
+        compileflags, 1) in test.globs
+      File "<doctest __main__[4]>", line 1, in <module>
+        flak.submit(text="The best blog in the world ;-)", link="http://gryziemy.net")
+      File "__init__.py", line 81, in _wrapper
+        raise FlakConfigurationError("You must provide some credentials in order to perform this action.")
+    FlakConfigurationError: You must provide some credentials in order to perform this action.
+
+    >>> flak.auth() # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      File "<ipython console>", line 1, in <module>
+      File "flaker/__init__.py", line 81, in _wrapper
+        raise FlakConfigurationError("You must provide some credentials in order to perform this action.")
+    FlakConfigurationError: You must provide some credentials in order to perform this action.
+
+    >>> flak.authorize('flakotest', '__XXX__') # doctest: +SKIP
+
+    >>> flak.auth() # doctest: +SKIP
+    True
+
+    >>> flak.submit(text="The best blog in the world ;-)", link="http://gryziemy.net") # doctest: +SKIP
+    u'http://flaker.pl/f/1707491'
+
+    >>> flak.submit(text="The best blog in the world", link="http://gryziemy.net") # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      File "/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/doctest.py", line 1231, in __run
+        compileflags, 1) in test.globs
+      File "<doctest __main__[7]>", line 1, in <module>
+        flak.submit(text="The best blog in the world", link="http://gryziemy.net") # doctest: +SKIP
+      File "__init__.py", line 66, in _wrapper
+        return fun(self, *a, **kw)
+      File "__init__.py", line 308, in submit
+        return self.request(data=data, authorize=True, type='submit')['status']['info']
+      File "__init__.py", line 183, in request
+        raise FlakDuplicateMessageError
+    FlakDuplicateMessageError
+
+
+"""
 
 import urllib2
 from urllib import urlencode
@@ -28,7 +81,7 @@ class FlakConfigurationError(FlakError):
 
 def login_required(fun):
     def _wrapper(self, *a, **kw):
-        if not self.login and self.password:
+        if not (self.login and self.password):
             raise FlakConfigurationError("You must provide some credentials in order to perform this action.")
         else:
             return fun(self, *a, **kw)
@@ -100,7 +153,7 @@ class Flak(object):
         return ("%s@%s: %s" % (self.user.login, self.datetime, self.text)).encode('utf-8')
 
     def __repr__(self):
-        return "Flak(permalink=%r, datetime=%r, comments=%r, source=%r, link=%r, video=%r, photo=%r, user=%r, text=%r, data=%r, id=%r" % \
+        return "Flak(permalink=%r, datetime=%r, comments=%r, source=%r, link=%r, video=%r, photo=%r, user=%r, text=%r, data=%r, id=%r)" % \
             (self.permalink, self.datetime, self.comments,
              self.source, self.link, self.video,
              self.photo, self.user, self.text, self.data, self.id)
@@ -136,12 +189,13 @@ class Flaker(object):
         url = self.URI + '/'.join("%s:%s" % (k, self.translate_value(v)) for k, v in kw.iteritems())
         if DEBUG:
             print url
+        if data:
+            data = urlencode(data)
         req = urllib2.Request(url, data = data)
 
         if authorize:
-            authheader = "Basic %s" % base64.encodestring("%s:%s"% (login, password))[:-1]
+            authheader = "Basic %s" % base64.encodestring("%s:%s"% (self.login, self.password))[:-1]
             req.add_header("Authorization", authheader)
-
         try:
             handle = urllib2.urlopen(req)
         except urllib2.HTTPError, e:
@@ -163,7 +217,10 @@ class Flaker(object):
                 response = json.load(handle, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
                 h = None
         except ValueError,e:
-            raise FlakError(h)
+            if DEBUG:
+                raise FlakError(h)
+            else:
+                raise FlakError
 
         return response
 
@@ -214,7 +271,7 @@ class Flaker(object):
         if tag:
             if tag == True:
                 tag = 'all'
-            kw[tag] = tag
+            kw['tag'] = tag
         kw['avatars'] = avatars
         kw['limit'] = limit
         if from_:
@@ -225,6 +282,8 @@ class Flaker(object):
             kw['since'] = since
         kw['sort'] = sort
         kw['comments'] = comments
+        if DEBUG:
+            print kw
         return self.request(**kw)
 
     @flak_decoding
@@ -253,11 +312,10 @@ class Flaker(object):
             kw['source'] = source
         else:
             kw['type'] = 'flakosfera'
-        print kw
         return self.get_messages(**kw)
 
     @login_required
-    def submit(self, text, link=None, photo=None):
+    def submit(self, text=None, link=None, photo=None):
         "Submit a status to Flaker."
         data = {'text': text}
         if link:
@@ -270,16 +328,19 @@ class Flaker(object):
                 data['link'] = photo
         return self.request(data=data, authorize=True, type='submit')['status']['info']
 
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
 
-if __name__=="__main__":
-    import sys
+# if __name__=="__main__":
+#     import sys
 
-    login, password = sys.argv[1], sys.argv[2]
-    print login, password
-    flak = Flaker(login=login, password=password)
-    print flak.auth()
+#     login, password = sys.argv[1], sys.argv[2]
+#     print login, password
+#     flak = Flaker(login=login, password=password)
+#     print flak.auth()
 
-    print flak.bookmarks('szopa')
+#     print flak.bookmarks('szopa')
 
 #     print
 #     for f in flak.bookmarks(login="hazan"):

@@ -2,11 +2,14 @@
 
 import urllib2
 from urllib import urlencode
+from datetime import datetime
 try:
     import json
 except ImportError:
     import simplejson as json
 import base64
+
+
 
 DEBUG=True
 
@@ -34,11 +37,62 @@ def login_required(fun):
 
 
 class Flak(object):
-    def __init__(self, **kw):
-        self.data = kw
+    def __init__(self,
+                 permalink=None,
+                 time=None,
+                 timestamp=None,
+                 comments=None,
+                 source=None,
+                 link=None,
+                 video=None,
+                 photo=None,
+                 user=None,
+                 text=None,
+                 has_photo=None,
+                 data=None,
+                 id=None,
+                 **kw):
+        self.permalink = permalink
+        self.video = video
+        self.comments = comments
+        self.source = source
+        self.link = link
+        self.user = user if isinstance(user, FlakUser) else FlakUser(**user)
+
+        self.text = text
+        self.photo = photo
+        self.data = data
+        self.id = id
+
+        # kludge, we are loosing tz information. note that datetime is
+        # in kw, not in normal args, because we don't want to shadow
+        # datetime
+        if isinstance(kw['datetime'], datetime):
+            self.datetime = kw['datetime']
+        else:
+            self.datetime = datetime.fromtimestamp(float(timestamp))
+    def __str__(self):
+        return ("%s@%s: %s" % (self.user.login, self.datetime, self.text)).encode('utf-8')
+
+    def __repr__(self):
+        return "Flak(permalink=%r, datetime=%r, comments=%r, source=%r, link=%r, video=%r, photo=%r, user=%r, text=%r, data=%r, id=%r" % \
+            (self.permalink, self.datetime, self.comments,
+             self.source, self.link, self.video,
+             self.photo, self.user, self.text, self.data, self.id)
 
 class FlakUser(object):
-    pass
+    def __init__(self, login=None, url=None, avatar=None, sex=None, action=None):
+        self.login = login
+        self.url = url
+        self.avatar = avatar
+        self.sex = sex # is this used anywhere?
+        self.action = action
+
+    def __eq__(self, other):
+        return self.login == other.login and self.url == other.url
+
+    def __repr__(self):
+        return "FlakUser(login=%r, url=%r, avatar=%r, sex=%r)" % (self.login, self.url, self.avatar, self.sex)
 
 class Flaker(object):
 
@@ -85,7 +139,7 @@ class Flaker(object):
         try:
             if DEBUG:
                 h = handle.read()
-                response = json.loads(h)
+                response = json.loads(h, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
             else:
                 response = json.load(h)
                 h = None
@@ -156,10 +210,8 @@ class Flaker(object):
     def friends(self, login):
         """Get all the friends of `login`.
 
-        If you are interested in the messages by the friends, see
-        `query`.
         """
-        return self.request(type='friends', login=login)['friends']
+        return self.request(type='friends', login=login)
 
     def query(self,
               user=None,
@@ -204,7 +256,9 @@ if __name__=="__main__":
     print login, password
     flak = Flaker(login=login, password=password)
     print flak.auth()
-    print flak.unbookmark(1234)
+
+    print repr(Flak(**flak.friends('szopa')['entries'][1]))
+
 #     print
 #     for f in flak.bookmarks(login="hazan"):
 #         for k,v in f.data.items():

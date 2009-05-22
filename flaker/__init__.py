@@ -58,6 +58,7 @@
 import urllib2
 from urllib import urlencode
 from datetime import datetime
+import time
 try:
     import json
 except ImportError:
@@ -79,6 +80,10 @@ class FlakDuplicateMessageError(FlakError):
     pass
 
 class FlakConfigurationError(FlakError):
+    """This error is raised in situations when the user hasn't
+    provided enough data to do perform an operation.
+
+    """
     pass
 
 def login_required(fun):
@@ -100,6 +105,9 @@ def flak_decoding(fun):
     return wrapper
 
 class FlakUser(object):
+    """This class represents a user of Flaker.
+
+    """
     def __init__(self, login=None, url=None, avatar=None, sex=None, action=None):
         self.login = login
         self.url = url
@@ -114,6 +122,7 @@ class FlakUser(object):
         return "FlakUser(login=%r, url=%r, avatar=%r, sex=%r)" % (self.login, self.url, self.avatar, self.sex)
 
 class Flak(object):
+    """Basic message object."""
     flakuser_class = FlakUser
     def __init__(self,
                  permalink=None,
@@ -170,6 +179,12 @@ class Flaker(object):
 
 
     def __init__(self, login=None, password=None):
+        """If you want to perform actions requiring authorization
+        (eg. adding new messages), you must provide a `login` and a
+        `password`. You can always authorize yourself later with
+        `authorize`.
+
+        """
         if login and password:
             self.login, self.password = login, password
         elif password:
@@ -177,18 +192,19 @@ class Flaker(object):
         else:
             self.login = self.password = None
 
-    def authorize(self, login, password):
+    def authorize(self, login=None, password=None):
+        """Authorize yourself with the given login and password."""
         self.login, self.password = login, password
 
-    def translate_value(self, val):
+    def _translate_value(self, val):
         if isinstance(val, bool):
             return "true" if val else "false"
         else:
             return val
 
-    def request(self, data=None, authorize=False, **kw):
+    def _request(self, data=None, authorize=False, **kw):
 
-        url = self.URI + '/'.join("%s:%s" % (k, self.translate_value(v)) for k, v in kw.iteritems())
+        url = self.URI + '/'.join("%s:%s" % (k, self._translate_value(v)) for k, v in kw.iteritems())
         if DEBUG:
             print url
         if data:
@@ -228,21 +244,27 @@ class Flaker(object):
 
     @login_required
     def auth(self):
-        r = self.request(type='auth', authorize=True)['status']
+        """Check whether the authorization data is correct. Returns
+        True if such is the case.
+
+        """
+        r = self._request(type='auth', authorize=True)['status']
         if r['text'] == "OK":
             return True
 
     @flak_decoding
     def bookmarks(self, login):
-        return self.request(login=login)
+        """Retrieve all the Flaks bookmarked by `login`.
+        """
+        return self._request(login=login)
 
     @login_required
     def tags(self):
-        return self.request(type='tags', authorize=True, login=self.login)['tags']
+        return self._request(type='tags', authorize=True, login=self.login)['tags']
 
     def _bookmark(self, entry_id, bookmark):
         action = 'set' if bookmark else 'unset'
-        r = self.request(type="bookmark", action=action, entry_id=entry_id, authorize=True)
+        r = self._request(type="bookmark", action=action, entry_id=entry_id, authorize=True)
         if r['status']['text'] == 'OK':
             return True
         else:
@@ -250,17 +272,20 @@ class Flaker(object):
 
     @login_required
     def bookmark(self, entry_id):
+        """Bookmark the entry whose id is provided."""
         return self._bookmark(entry_id, True)
 
     @login_required
     def unbookmark(self, entry_id):
+        """Unbookmark the entry whose id is provided."""
         return self._bookmark(entry_id, False)
 
 
     def show(self, entry_id):
-        return self.flak_class(**self.request(type='show', entry_id=entry_id)['entries'][0])
+        """Return a single Flak identified by entry_id."""
+        return self.flak_class(**self._request(type='show', entry_id=entry_id)['entries'][0])
 
-    def get_messages(self,
+    def _get_messages(self,
                      tag=None,
                      avatars='small',
                      limit=20,
@@ -281,19 +306,20 @@ class Flaker(object):
         if start:
             kw['start'] = start
         if since:
+            if isinstance(since, datetime):
+                since = time.mktime(since.timetuple())
             kw['since'] = since
         kw['sort'] = sort
         kw['comments'] = comments
         if DEBUG:
             print kw
-        return self.request(**kw)
+        return self._request(**kw)
 
     @flak_decoding
     def friends(self, login):
         """Get all the friends of `login`.
-
         """
-        return self.request(type='friends', login=login)
+        return self._request(type='friends', login=login)
 
     @flak_decoding
     def query(self,
@@ -301,6 +327,42 @@ class Flaker(object):
               site=None,
               source=None,
               **kw):
+        """Query Flaker for messages meeting certain criteria.
+
+        If you provide one of `user`, `site` or `source`, you will get
+        entries related to a given user, site or source. If you don't
+        specify any of them, you will get entries from the whole
+        "flakosphere".
+
+        Example values of `source` are:
+          * "favorites", "commented", "photos", "videos", "links" (names of streams)
+          * "flaker", "garnek", "fotka", "blox" (names of webservices).
+
+        Please consult http://blog.flaker.pl/api-pobieranie-wpisow/
+        for more specific information about possible values of
+        `source`.
+
+        Other arguments:
+
+         * `avatars` size of the avatar pictures. Possible values:
+           "small", "medium", "big" (default small).
+
+         * `limit` number of entries (default 20).
+
+         * `from_` the same as offset in SQL. Note the trailing "_".
+
+         * `start` retrieve entries whose id is bigger than `start`.
+
+         * `since` Unix timestamp or datetime.datetime object,
+           retrieve objects newer than `since`.
+
+         * `sort` sorting order: "asc" for ascending, "desc" for
+           descending.
+
+         * `comments` boolean, whether to retrieve comments (default
+           False).
+
+        """
         if len([o for o in (user, site, source) if o]) > 1:
             raise FlakConfigurationError("You may provide at most one of `user`, `site` and `source`.")
         if user:
@@ -314,11 +376,15 @@ class Flaker(object):
             kw['source'] = source
         else:
             kw['type'] = 'flakosfera'
-        return self.get_messages(**kw)
+        return self._get_messages(**kw)
 
     @login_required
     def submit(self, text=None, link=None, photo=None):
-        "Submit a status to Flaker."
+        """Submit a message to Flaker.
+
+        `photo` may be either a file object (which will be uploaded)
+        or a url to some image in the Internet.
+        """
         data = {'text': text}
         if link:
             data['link'] = link
@@ -328,7 +394,7 @@ class Flaker(object):
                 data['photo'] = open(photo)
             except IOError:
                 data['link'] = photo
-        return self.request(data=data, authorize=True, type='submit')['status']['info']
+        return self._request(data=data, authorize=True, type='submit')['status']['info']
 
 if __name__ == "__main__":
     import doctest

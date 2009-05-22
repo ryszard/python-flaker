@@ -260,6 +260,7 @@ class Flaker(object):
 
     @login_required
     def tags(self):
+        """Retrieve all tags observed by the authorized user."""
         return self._request(type='tags', authorize=True, login=self.login)['tags']
 
     def _bookmark(self, entry_id, bookmark):

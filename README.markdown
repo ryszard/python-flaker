@@ -11,7 +11,7 @@ Installation
 ------------
 
 The easiest way to install python-flaker is to use easy_install:
-    $ easy_install python-flaker
+    $ easy_install flaker
 
 If you prefer to use the development version, you can clone the git repository:
 

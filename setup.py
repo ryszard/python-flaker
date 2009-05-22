@@ -4,7 +4,7 @@ import sys
 
 setup(
     name = "flaker",
-    version = "0.2.2",
+    version = "0.2.3",
     description="Flaker.pl client",
     author="Ryszard Szopa",
     author_email="ryszard.szopa@gmail.com",

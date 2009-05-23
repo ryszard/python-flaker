@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+
+
     >>> flak = Flaker()
 
     >>> flak.show(9)  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
@@ -28,15 +30,17 @@
         raise FlakConfigurationError("You must provide some credentials in order to perform this action.")
     FlakConfigurationError: You must provide some credentials in order to perform this action.
 
-    >>> flak.authorize('flakotest', '__XXX__') # doctest: +SKIP
+    >>> flak.authorize(TEST_LOGIN, TEST_PASSWORD)
 
-    >>> flak.auth() # doctest: +SKIP
+    >>> flak.auth()
     True
 
-    >>> flak.submit(text="The best blog in the world ;-)", link="http://gryziemy.net") # doctest: +SKIP
-    u'http://flaker.pl/f/1707491'
+    >>> relative_now = datetime.now()
 
-    >>> flak.submit(text="The best blog in the world", link="http://gryziemy.net") # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
+    >>> flak.submit(text="The best blog in the world ;-) %s" % relative_now, link="http://gryziemy.net") # doctest: +ELLIPSIS, -SKIP
+    u'http://flaker.pl/f/...'
+
+    >>> flak.submit(text="The best blog in the world ;-) %s" % relative_now, link="http://gryziemy.net") # doctest: +IGNORE_EXCEPTION_DETAIL, -SKIP
     Traceback (most recent call last):
       File "/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/doctest.py", line 1231, in __run
         compileflags, 1) in test.globs
@@ -50,12 +54,12 @@
         raise FlakDuplicateMessageError
     FlakDuplicateMessageError
 
-    >>> flaker.query(tag="python", from_=1) # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
+    >>> flak.query(tag="python", from_=1) # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE, -SKIP
     [Flak(...), ...]
 
 """
-
-import urllib2
+import pycurl
+import StringIO
 from urllib import urlencode
 from datetime import datetime
 import time
@@ -63,7 +67,6 @@ try:
     import json
 except ImportError:
     import simplejson as json
-import base64
 
 
 
@@ -84,6 +87,11 @@ class FlakConfigurationError(FlakError):
     provided enough data to do perform an operation.
 
     """
+    pass
+
+class FlakServerError(FlakError):
+    """Raised when curl raises an error. This may indicate that the
+    flaker.pl server is unreachable."""
     pass
 
 def login_required(fun):
@@ -178,7 +186,7 @@ class Flaker(object):
     flakuser_class = FlakUser
 
 
-    def __init__(self, login=None, password=None):
+    def __init__(self, login=None, password=None, debug=False):
         """If you want to perform actions requiring authorization
         (eg. adding new messages), you must provide a `login` and a
         `password`. You can always authorize yourself later with
@@ -191,6 +199,7 @@ class Flaker(object):
             raise FlakConfigurationError("If you provide a password you should also provide a login")
         else:
             self.login = self.password = None
+        self.debug = debug
 
     def authorize(self, login=None, password=None):
         """Authorize yourself with the given login and password."""
@@ -204,41 +213,57 @@ class Flaker(object):
 
     def _request(self, data=None, authorize=False, **kw):
 
-        url = self.URI + '/'.join("%s:%s" % (k, self._translate_value(v)) for k, v in kw.iteritems())
-        if DEBUG:
-            print url
-        if data:
-            data = urlencode(data)
-        req = urllib2.Request(url, data = data)
-
-        if authorize:
-            authheader = "Basic %s" % base64.encodestring("%s:%s"% (self.login, self.password))[:-1]
-            req.add_header("Authorization", authheader)
         try:
-            handle = urllib2.urlopen(req)
-        except urllib2.HTTPError, e:
-            code = e.getcode()
+            curl = pycurl.Curl()
+            buffer = StringIO.StringIO()
+
+            curl.setopt(pycurl.URL, self.URI + '/'.join("%s:%s" % (k, self._translate_value(v)) for k, v in kw.iteritems()))
+
+            if self.debug:
+                def curl_debug(debug_type, debug_msg):
+                    print "debug(%d): %s" % (debug_type, debug_msg)
+
+                curl.setopt(pycurl.VERBOSE, 1)
+                curl.setopt(pycurl.DEBUGFUNCTION, curl_debug)
+
+            if authorize:
+                curl.setopt(pycurl.USERPWD, "%s:%s" % (self.login, self.password))
+                curl.setopt(pycurl.HTTPAUTH, pycurl.HTTPAUTH_BASIC)
+
+            curl.setopt(pycurl.WRITEFUNCTION, buffer.write)
+            curl.setopt(pycurl.FOLLOWLOCATION, 1)
+            curl.setopt(pycurl.MAXREDIRS, 5)
+
+            if data:
+                try:
+                    data['photo'] =  (pycurl.FORM_FILE, "@"+data['photo'])
+                except KeyError:
+                    pass
+
+                curl.setopt(pycurl.HTTPPOST, data.items())
+                curl.setopt(pycurl.POST, 1)
+
+            curl.perform()
+            code = curl.getinfo(pycurl.HTTP_CODE)
+
             if code == 409:
                 raise FlakDuplicateMessageError
             elif code == 401:
                 raise FlakAuthorizationError
             elif code == 400:
                 raise FlakError(url)
-            else:
-                raise
 
-        try:
-            if DEBUG:
-                h = handle.read()
-                response = json.loads(h, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
-            else:
-                response = json.load(handle, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
-                h = None
-        except ValueError,e:
-            if DEBUG:
-                raise FlakError(h)
-            else:
-                raise FlakError
+            try:
+                val = buffer.getvalue()
+                response = json.loads(val, object_hook=lambda d: dict((str(k), v) for k, v in d.iteritems()))
+            except ValueError:
+                raise FlakError(val)
+        except pycurl.error, e:
+            raise FlakServerError("There's a problem when I try to reach the server: %s" % e)
+
+        finally:
+            buffer.close()
+            curl.close()
 
         return response
 
@@ -392,13 +417,16 @@ class Flaker(object):
         if photo:
             # if it's not a file assume it is a URL to one.
             try:
-                data['photo'] = open(photo)
+                data['photo'] = "%s" % photo
+                # kludge
             except IOError:
                 data['link'] = photo
         return self._request(data=data, authorize=True, type='submit')['status']['info']
 
 if __name__ == "__main__":
     import doctest
+    import sys
+    TEST_LOGIN, TEST_PASSWORD = sys.argv[1], sys.argv[2]
     doctest.testmod()
 
 # if __name__=="__main__":

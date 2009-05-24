@@ -28,15 +28,17 @@
         raise FlakConfigurationError("You must provide some credentials in order to perform this action.")
     FlakConfigurationError: You must provide some credentials in order to perform this action.
 
-    >>> flak.authorize('flakotest', '__XXX__') # doctest: +SKIP
+    >>> flak.authorize(TEST_LOGIN, TEST_PASSWORD)
 
-    >>> flak.auth() # doctest: +SKIP
+    >>> flak.auth()
     True
 
-    >>> flak.submit(text="The best blog in the world ;-)", link="http://gryziemy.net") # doctest: +SKIP
-    u'http://flaker.pl/f/1707491'
+    >>> relative_now = datetime.now()
 
-    >>> flak.submit(text="The best blog in the world", link="http://gryziemy.net") # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
+    >>> flak.submit(text="%s" % relative_now, link="http://gryziemy.net") # doctest: +ELLIPSIS
+    u'http://flaker.pl/f/...'
+
+    >>> flak.submit(text="%s" % relative_now, link="http://gryziemy.net") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       File "/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/doctest.py", line 1231, in __run
         compileflags, 1) in test.globs
@@ -59,7 +61,6 @@
 """
 
 import urllib2
-from urllib import urlencode
 from datetime import datetime
 import time
 try:
@@ -67,6 +68,10 @@ try:
 except ImportError:
     import simplejson as json
 import base64
+from poster.streaminghttp import register_openers
+from poster.encode import multipart_encode
+
+register_openers()
 
 
 
@@ -207,16 +212,19 @@ class Flaker(object):
 
     def _request(self, data=None, authorize=False, **kw):
 
+
         url = self.URI + '/'.join("%s:%s" % (k, self._translate_value(v)) for k, v in kw.iteritems())
         if DEBUG:
             print url
         if data:
-            data = urlencode(data)
-        req = urllib2.Request(url, data = data)
-
+            data, headers = multipart_encode(data)
+        else:
+            headers = {}
         if authorize:
             authheader = "Basic %s" % base64.encodestring("%s:%s"% (self.login, self.password))[:-1]
-            req.add_header("Authorization", authheader)
+            headers["Authorization"] =  authheader
+
+        req = urllib2.Request(url, data, headers)
         try:
             handle = urllib2.urlopen(req)
         except urllib2.HTTPError, e:

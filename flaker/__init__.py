@@ -53,6 +53,9 @@
     >>> flaker.query(tag="python", from_=1) # doctest: +SKIP, +IGNORE_EXCEPTION_DETAIL
     [Flak(...), ...]
 
+    >>> flak.submit(text="%s" % datetime.now(), photo=TEST_FILE) # doctest: +ELLIPSIS
+    u'http://flaker.pl/f/...'
+
 """
 
 import urllib2
@@ -399,6 +402,12 @@ class Flaker(object):
 
 if __name__ == "__main__":
     import doctest
+    import sys
+    try:
+        TEST_LOGIN, TEST_PASSWORD, TEST_FILE = sys.argv[1], sys.argv[2], sys.argv[3]
+    except IndexError:
+        raise Exception("Provide a filename as the third argument to test file uploading.")
+
     doctest.testmod()
 
 # if __name__=="__main__":
